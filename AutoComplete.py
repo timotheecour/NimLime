@@ -1,11 +1,13 @@
 import sublime, sublime_plugin
-import os, subprocess, tempfile
+import os, subprocess, tempfile, time
 import re
 
 try: # Python 3
     from NimLime.Project import Utility
-except ImportError: # Python 2:
+    from NimLime.Caas import *
+except ImportError:  # Python 2:
     from Project import Utility
+    from Caas import *
 
 settings = {}
 do_suggestions = False # Whether to provide suggestions
@@ -119,7 +121,6 @@ class NimrodCompleter(sublime_plugin.EventListener):
         
         dirtyFileName = ""
         dirtyFile = None
-        pargs = "nimrod --verbosity:0 idetools --suggest "
 
         if view.is_dirty():
             #Generate dirty file
@@ -130,22 +131,15 @@ class NimrodCompleter(sublime_plugin.EventListener):
                 view.substr(sublime.Region(0, size)).encode("UTF-8")
             )
             dirtyFile.file.close()
-            pargs = pargs + "--trackDirty:" + dirtyFileName + ","
-        else:
-            pargs = pargs + "--track:"      
 
-        pargs = pargs + filename \
-         + "," + str(line) + "," + str(col) \
-         + " " + projFile
-
-        print(pargs)
-
-        handle = os.popen(pargs)
+        caas = get_caas_for_project(projFile)
+        caas.send_command("--suggest", filename, line, col, dirtyFileName)
+        
         line = " "
-        while line:
-            line = handle.readline()
-
+        while line != "" and line != "\n":
+            line = caas.read_line().decode("UTF-8")
             print(line)
+
             parts = line.split("\t")
             partlen = len(parts)
 
@@ -185,9 +179,6 @@ class NimrodCompleter(sublime_plugin.EventListener):
                     hint = item.qualName + "\t" + item.signature
 
             results.append((hint, completion))
-
-        # Close the idetools connection
-        handle.close()
 
         # Delete the dirty file
         if dirtyFile != None:
